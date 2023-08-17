@@ -71,6 +71,6 @@ def docker_compose():
     """
     try:
         import subprocess
-        subprocess.run(["docker-compose", "up", "-d"])
+        subprocess.run(["docker-compose", "up", "-d", "--build"])
     except Exception as e:
         logging.error(f"An error occurred while running docker compose: {e}")

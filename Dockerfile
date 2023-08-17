@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y \
     ccache \
     python3 \
     vim \
+    fish \
+    iproute2 \
     build-essential \
     wget && \
     apt-get clean && \
@@ -17,16 +19,14 @@ ARG BITCOIN_VERSION
 RUN wget $BITCOIN_URL && \
     tar -xzf bitcoin-${BITCOIN_VERSION}-${ARCH}-linux-gnu.tar.gz -C /usr/local --strip-components=1
 
-# Create a directory for Bitcoin data and set it as the working directory.
+COPY pysoxy.py /pysoxy.py
+RUN chmod +x /pysoxy.py
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 RUN mkdir /bitcoin
 WORKDIR /bitcoin
 COPY config/bitcoin.conf .
 
-
-# Expose necessary ports for the Bitcoin service.
-#EXPOSE 18444 18443
-#EXPOSE 8332 8333
-
-# Start the Bitcoin Core daemon.
-CMD ["/usr/local/bin/bitcoind", "--datadir=/bitcoin", "--conf=/bitcoin/bitcoin.conf"]
-
+CMD ["/entrypoint.sh"]
