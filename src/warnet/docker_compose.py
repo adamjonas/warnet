@@ -3,8 +3,10 @@ import subprocess
 import logging
 import networkx as nx
 from .prometheus import generate_prometheus_config
+from .ip_addr import generate_ip_addr
 
 logging.basicConfig(level=logging.INFO)
+
 
 def get_architecture():
     """
@@ -39,6 +41,9 @@ def generate_docker_compose(graph_file: str):
     graph = nx.read_graphml(graph_file, node_type=int)
     nodes = graph.nodes()
     generate_prometheus_config(len(nodes))
+    subnet = "172.21.0.0/16"
+    ip_mapping = {}
+    services = {}
 
     services = {
         "prometheus": {
@@ -47,31 +52,22 @@ def generate_docker_compose(graph_file: str):
             "ports": ["9090:9090"],
             "volumes": ["./prometheus.yml:/etc/prometheus/prometheus.yml"],
             "command": ["--config.file=/etc/prometheus/prometheus.yml"],
-            "networks": [
-                "warnet_network"
-            ]
+            "networks": ["warnet_network"]
         },
         "node-exporter": {
             "image": "prom/node-exporter:latest",
             "container_name": "node-exporter",
-            "volumes": [
-                "/proc:/host/proc:ro",
-                "/sys:/host/sys:ro",
-                "/:/rootfs:ro"
-            ],
+            "volumes":
+            ["/proc:/host/proc:ro", "/sys:/host/sys:ro", "/:/rootfs:ro"],
             "command": ["--path.procfs=/host/proc", "--path.sysfs=/host/sys"],
-            "networks": [
-                "warnet_network"
-            ]
+            "networks": ["warnet_network"]
         },
         "grafana": {
             "image": "grafana/grafana:latest",
             "container_name": "grafana",
             "ports": ["3000:3000"],
             "volumes": ["grafana-storage:/var/lib/grafana"],
-            "networks": [
-                "warnet_network"
-            ]
+            "networks": ["warnet_network"]
         }
     }
     volumes = {
@@ -80,6 +76,9 @@ def generate_docker_compose(graph_file: str):
 
     for i in range(len(nodes)):
         version = nodes[i]["version"]
+        ip_address = f"172.21.0.{i + 3}"
+        ip_mapping[generate_ip_addr()] = ip_address
+
         services[f"bitcoin-node-{i}"] = {
             "container_name": f"warnet_{i}",
             "build": {
@@ -91,12 +90,12 @@ def generate_docker_compose(graph_file: str):
                     "BITCOIN_URL": f"https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-{arch}-linux-gnu.tar.gz"
                 }
             },
-            "volumes": [
-                f"./config/bitcoin.conf:/root/.bitcoin/bitcoin.conf"
-            ],
-            "networks": [
-                "warnet_network"
-            ]
+            "volumes": [f"./config/bitcoin.conf:/root/.bitcoin/bitcoin.conf"],
+            "networks": {
+                "warnet_network": {
+                    "ipv4_address": ip_address
+                }
+            }
         }
         services[f"prom-exporter-node-{i}"] = {
             "image": "jvstein/bitcoin-prometheus-exporter",
@@ -108,27 +107,33 @@ def generate_docker_compose(graph_file: str):
                 "BITCOIN_RPC_PASSWORD": "passwd",
             },
             "ports": [f"{8335 + i}:9332"],
-            "networks": [
-                "warnet_network"
-            ]
+            "networks": ["warnet_network"]
         }
 
     compose_config = {
         "version": "3.8",
         "services": services,
-        "volumes": volumes,
+       "volumes": volumes,
         "networks": {
             "warnet_network": {
                 "name": "warnet_network",
-                "driver": "bridge"
+                "driver": "bridge",
+                "ipam": {
+                    "config": [{
+                        "subnet": subnet
+                    }]
+                }
             }
         }
     }
+
+    with open('ip_mapping.dat', 'w') as file:
+        for fake_ip, real_ip in ip_mapping.items():
+            file.write(f"{fake_ip}, {real_ip}\n")
 
     try:
         with open("docker-compose.yml", "w") as file:
             yaml.dump(compose_config, file)
     except Exception as e:
-        logging.error(f"An error occurred while writing to docker-compose.yml: {e}")
-
-
+        logging.error(
+            f"An error occurred while writing to docker-compose.yml: {e}")

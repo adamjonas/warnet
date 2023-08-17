@@ -21,6 +21,7 @@ RUN wget $BITCOIN_URL && \
 
 COPY pysoxy.py /pysoxy.py
 RUN chmod +x /pysoxy.py
+COPY ip_mapping.dat ip_mapping.dat
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

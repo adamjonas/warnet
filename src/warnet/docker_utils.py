@@ -35,7 +35,7 @@ def generate_compose(graph_file: str):
         logging.error(f"An error occurred while running new node: {e}")
 
 
-def get_container_ip(client: docker.DockerClient, container_name: str):
+def get_container_ip(client: docker.DockerClient, container_name: str, routing_table):
     """
     Get the IP address of a container.
 
@@ -45,8 +45,8 @@ def get_container_ip(client: docker.DockerClient, container_name: str):
     try:
         container = client.containers.get(container_name)
         container.reload()
-        return container.attrs["NetworkSettings"]["Networks"][
-            "warnet_network"]["IPAddress"]
+        return routing_table[container.attrs["NetworkSettings"]["Networks"][
+            "warnet_network"]["IPAddress"]]
     except Exception as e:
         logging.error(f"An error occurred while getting container IP: {e}")
 

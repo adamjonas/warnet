@@ -67,6 +67,22 @@ class ExitStatus:
         return self.exit
 
 
+def load_ip_mapping(filename):
+    """
+    Load the IP mapping from a file into a dictionary.
+
+    :param filename: The name of the file containing the IP mapping
+    :return: A dictionary mapping real IP addresses to fake IP addresses
+    """
+    ip_mapping = {}
+    with open(filename, 'r') as file:
+        for line in file:
+            fake_ip, real_ip = line.strip().split(', ')
+            ip_mapping[real_ip] = fake_ip
+            ip_mapping[fake_ip] = real_ip
+    return ip_mapping
+
+
 def error(msg="", err=None):
     """ Print exception stack trace python """
     if msg:
@@ -103,22 +119,21 @@ def proxy_loop(socket_src, socket_dst):
 def connect_to_dst(dst_addr, dst_port):
     """ Connect to desired destination """
     sock = create_socket()
-    if OUTGOING_INTERFACE:
-        try:
-            sock.setsockopt(
-                socket.SOL_SOCKET,
-                socket.SO_BINDTODEVICE,
-                OUTGOING_INTERFACE.encode(),
-            )
-        except PermissionError as err:
-            logging.exception("Only root can set OUTGOING_INTERFACE parameter")
-            EXIT.set_status(True)
     try:
-        sock.connect((dst_addr, dst_port))
+        # Decode the byte string to a regular string
+        dst_addr = dst_addr.decode()
+        # Look up the fake IP address from the mapping dictionary
+        fake_addr = ip_mapping[dst_addr]
+        if OUTGOING_INTERFACE:
+            sock.bind((fake_addr, 0))
+            logging.info(f"Connected to {fake_addr}")
+        sock.connect((fake_addr, dst_port))
         return sock
+    except KeyError:
+        logging.error("No fake IP mapping found for real IP: %s", dst_addr)
     except socket.error as err:
         error("Failed to connect to DST", err)
-        return 0
+    return 0
 
 
 def request_client(wrapper):
@@ -152,7 +167,7 @@ def request_client(wrapper):
         dst_port = unpack('>H', port_to_unpack)[0]
     else:
         return False
-    logging.info(dst_addr, dst_port)
+    logging.debug(dst_addr, dst_port)
     return (dst_addr, dst_port)
 
 
@@ -320,4 +335,7 @@ def main():
 
 EXIT = ExitStatus()
 if __name__ == "__main__":
+    # Load the IP mapping from the file
+    ip_mapping = load_ip_mapping('/ip_mapping.dat')
+    logging.info(ip_mapping)
     main()
