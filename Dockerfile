@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y \
     python3 \
     vim \
     build-essential \
+    iproute2 \
+    traceroute \
+    fish \
     wget && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

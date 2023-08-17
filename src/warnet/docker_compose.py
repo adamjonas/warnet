@@ -3,6 +3,7 @@ import subprocess
 import logging
 import networkx as nx
 from .prometheus import generate_prometheus_config
+from .ip_addr import generate_ip_addresses
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,48 +39,35 @@ def generate_docker_compose(graph_file: str):
 
     graph = nx.read_graphml(graph_file, node_type=int)
     nodes = graph.nodes()
+    addr_pairs = generate_ip_addresses(len(nodes))
     generate_prometheus_config(len(nodes))
 
-    services = {
-        "prometheus": {
-            "image": "prom/prometheus:latest",
-            "container_name": "prometheus",
-            "ports": ["9090:9090"],
-            "volumes": ["./prometheus.yml:/etc/prometheus/prometheus.yml"],
-            "command": ["--config.file=/etc/prometheus/prometheus.yml"],
-            "networks": [
-                "warnet_network"
-            ]
-        },
-        "node-exporter": {
-            "image": "prom/node-exporter:latest",
-            "container_name": "node-exporter",
-            "volumes": [
-                "/proc:/host/proc:ro",
-                "/sys:/host/sys:ro",
-                "/:/rootfs:ro"
-            ],
-            "command": ["--path.procfs=/host/proc", "--path.sysfs=/host/sys"],
-            "networks": [
-                "warnet_network"
-            ]
-        },
-        "grafana": {
-            "image": "grafana/grafana:latest",
-            "container_name": "grafana",
-            "ports": ["3000:3000"],
-            "volumes": ["grafana-storage:/var/lib/grafana"],
-            "networks": [
-                "warnet_network"
-            ]
+    # Networks configuration
+    networks = {}
+    for i in range(len(nodes)):
+        network_name = f"warnet_network_{i}"
+        subnet, _ = addr_pairs[i]
+        networks[network_name] = {
+            "driver": "bridge",
+            "ipam": {
+                "config": [
+                    {
+                        "subnet": subnet
+                    }
+                ]
+            }
         }
-    }
+
+    services = {}
     volumes = {
         "grafana-storage": None,
     }
 
     for i in range(len(nodes)):
         version = nodes[i]["version"]
+        _, ip = addr_pairs[i]
+        network_name = f"warnet_network_{i}"
+
         services[f"bitcoin-node-{i}"] = {
             "container_name": f"warnet_{i}",
             "build": {
@@ -94,35 +82,18 @@ def generate_docker_compose(graph_file: str):
             "volumes": [
                 f"./config/bitcoin.conf:/root/.bitcoin/bitcoin.conf"
             ],
-            "networks": [
-                "warnet_network"
-            ]
-        }
-        services[f"prom-exporter-node-{i}"] = {
-            "image": "jvstein/bitcoin-prometheus-exporter",
-            "container_name": f"exporter-node-{i}",
-            "environment": {
-                "BITCOIN_RPC_HOST": f"bitcoin-node-{i}",
-                "BITCOIN_RPC_PORT": 18443,
-                "BITCOIN_RPC_USER": "btc",
-                "BITCOIN_RPC_PASSWORD": "passwd",
-            },
-            "ports": [f"{8335 + i}:9332"],
-            "networks": [
-                "warnet_network"
-            ]
+            "networks": {
+                network_name: {
+                    "ipv4_address": ip
+                }
+            }
         }
 
     compose_config = {
         "version": "3.8",
         "services": services,
         "volumes": volumes,
-        "networks": {
-            "warnet_network": {
-                "name": "warnet_network",
-                "driver": "bridge"
-            }
-        }
+        "networks": networks
     }
 
     try:
@@ -130,5 +101,4 @@ def generate_docker_compose(graph_file: str):
             yaml.dump(compose_config, file)
     except Exception as e:
         logging.error(f"An error occurred while writing to docker-compose.yml: {e}")
-
 
