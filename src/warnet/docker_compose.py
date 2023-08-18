@@ -23,7 +23,7 @@ def get_architecture():
         return None
 
 
-def generate_docker_compose(graph_file: str):
+def generate_docker_compose(graph):
     """
     Generate a docker-compose.yml file for the given graph.
 
@@ -36,7 +36,6 @@ def generate_docker_compose(graph_file: str):
     else:
         raise Exception("Failed to detect architecture.")
 
-    graph = nx.read_graphml(graph_file, node_type=int)
     nodes = graph.nodes()
     generate_prometheus_config(len(nodes))
 
