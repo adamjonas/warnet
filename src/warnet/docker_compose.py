@@ -3,11 +3,13 @@ import sys
 import yaml
 import subprocess
 import logging
+from typing import List, Optional, Dict, Union
 
 import networkx as nx
 from .prometheus import generate_prometheus_config
 from .conf_parser import parse_bitcoin_conf, dump_bitcoin_conf
 from .addr import generate_ip_addr, DEFAULT_SUBNET
+from .services import DockerComposeService, DockerComposeServicesDict
 
 logging.basicConfig(level=logging.INFO)
 DOCKER_COMPOSE_FILE = "docker-compose.yml"
@@ -86,40 +88,40 @@ def generate_docker_compose(graph_file: str):
     write_bitcoin_configs(graph)
     generate_prometheus_config(len(nodes))
 
-    services = {
-        "prometheus": {
-            "image": "prom/prometheus:latest",
-            "container_name": "prometheus",
-            "ports": ["9090:9090"],
-            "volumes": ["./prometheus.yml:/etc/prometheus/prometheus.yml"],
-            "command": ["--config.file=/etc/prometheus/prometheus.yml"],
-            "networks": [
-                "warnet"
-            ]
-        },
-        "node-exporter": {
-            "image": "prom/node-exporter:latest",
-            "container_name": "node-exporter",
-            "volumes": [
-                "/proc:/host/proc:ro",
-                "/sys:/host/sys:ro",
-                "/:/rootfs:ro"
-            ],
-            "command": ["--path.procfs=/host/proc", "--path.sysfs=/host/sys"],
-            "networks": [
-                "warnet"
-            ]
-        },
-        "grafana": {
-            "image": "grafana/grafana:latest",
-            "container_name": "grafana",
-            "ports": ["3000:3000"],
-            "volumes": ["grafana-storage:/var/lib/grafana"],
-            "networks": [
-                "warnet"
-            ]
-        }
-    }
+    services = DockerComposeServicesDict()
+
+    services.add_service(
+        name="prometheus",
+        container_name="prometheus",
+        image="prom/prometheus:latest",
+        ports=["9090:9090"],
+        volumes=["./prometheus.yml:/etc/prometheus/prometheus.yml"],
+        command=["--config.file=/etc/prometheus/prometheus.yml"],
+        networks=["warnet"]
+    )
+
+    services.add_service(
+        name="node-exporter",
+        container_name="node-exporter",
+        image="prom/node-exporter:latest",
+        volumes=[
+            "/proc:/host/proc:ro",
+            "/sys:/host/sys:ro",
+            "/:/rootfs:ro"
+        ],
+        command=["--path.procfs=/host/proc", "--path.sysfs=/host/sys"],
+        networks=["warnet"]
+    )
+
+    services.add_service(
+        name="grafana",
+        container_name="grafana",
+        image="grafana/grafana:latest",
+        ports=["3000:3000"],
+        volumes=["grafana-storage:/var/lib/grafana"],
+        networks=["warnet"]
+    )
+
     volumes = {
         "grafana-storage": None,
     }
@@ -160,44 +162,41 @@ def generate_docker_compose(graph_file: str):
         # TODO: we may need unique service names to bust cache if .yml file changes
         ip_addr = generate_ip_addr(DEFAULT_SUBNET)
         logging.debug(f"Using ip addr {ip_addr} for node {i}")
-        services[f"bitcoin-node-{i}"] = {
-            "container_name": f"warnet_{i}",
-            "build": build,
-            "volumes": [
-                f"{conf_file_path}:/root/.bitcoin/bitcoin.conf"
-            ],
-            "networks": {
-                "warnet": {
-                    "ipv4_address": f"{ip_addr}",
-                }
-            }
-        }
 
-        services[f"prom-exporter-node-{i}"] = {
-            "image": "jvstein/bitcoin-prometheus-exporter",
-            "container_name": f"exporter-node-{i}",
-            "environment": {
+        # Add bitcoin-node service
+        services.add_service(
+            name=f"bitcoin-node-{i}",
+            container_name=f"warnet_{i}",
+            build=build,
+            volumes=[f"{conf_file_path}:/root/.bitcoin/bitcoin.conf"],
+            networks={"warnet": {"ipv4_address": f"{ip_addr}"}}
+        )
+
+        # Add prom-exporter-node service
+        services.add_service(
+            name=f"prom-exporter-node-{i}",
+            container_name=f"exporter-node-{i}",
+            image="jvstein/bitcoin-prometheus-exporter",
+            environment={
                 "BITCOIN_RPC_HOST": f"bitcoin-node-{i}",
                 "BITCOIN_RPC_PORT": 18443,
                 "BITCOIN_RPC_USER": "btc",
                 "BITCOIN_RPC_PASSWORD": "passwd",
             },
-            "ports": [f"{8335 + i}:9332"],
-            "networks": [
-                "warnet"
-            ]
-        }
+            ports=[f"{8335 + i}:9332"],
+            networks=["warnet"]
+        )
 
     compose_config = {
         "version": "3.8",
-        "services": services,
+        "services": dict(services),
         "volumes": volumes,
         "networks": {
             "warnet": {
                 "name": "warnet",
                 "ipam": {
                     "config": [
-                        {"subnet": "100.0.0.0/8"}
+                        {"subnet": DEFAULT_SUBNET},
                     ]
                 }
             }
