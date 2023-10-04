@@ -152,8 +152,8 @@ export const defaultNodesData: Node<GraphNode>[] = [
     data: {
       id: "6",
       label: "node 6",
-      version: "0.21.0",
-      latency: "15ms",
+      version: "25.0",
+      latency: "10ms",
       size: 10,
       baseFee: 0.2,
     },

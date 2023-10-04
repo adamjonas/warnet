@@ -18,6 +18,7 @@ import dagre from "@dagrejs/dagre";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useNetworkContext } from "./network-context";
 import { readXML } from "@/helpers/generate-network-from-graphml";
+import useGroupedNodes from "@/hooks/useGroupedNodes";
 
 export const nodeFlowContext = React.createContext<NodeGraphContext>(null!);
 
@@ -34,27 +35,31 @@ export const NodeGraphFlowProvider = ({
     useState<NodePersonaType | null>(null);
   const [nodePersona, setNodePersona] = useState<NodePersona | null>(null);
   const [nodeInfo, setNodeInfo] = useState<Node<GraphNode> | null>(null);
+
+  const groupedNodes = useGroupedNodes({nodes})
+
   const openDialog = () => setIsDialogOpen(true);
   const closeDialog = () => {
     setIsDialogOpen(false);
   };
 
-  const hasForcedGraph = useRef(false)
+  const hasComputedHash = useRef(false);
+  const hasForcedGraph = useRef(false);
 
   const { networkList } = useNetworkContext();
 
-  const router = useRouter()
+  const router = useRouter();
   const searchParams = useSearchParams();
   const networkQuery = searchParams.get("network");
   const showGraph = Boolean(networkQuery);
 
   function reset() {
-    setIsDialogOpen(false)
-    setNodes([])
-    setEdges([])
-    setNodePersonaType(null)
-    setNodeInfo(null)
-    setNodePersona(null)
+    setIsDialogOpen(false);
+    setNodes([]);
+    setEdges([]);
+    setNodePersonaType(null);
+    setNodeInfo(null);
+    setNodePersona(null);
   }
 
   async function getGraphDetails(network: SavedNetworkGraph) {
@@ -76,8 +81,8 @@ export const NodeGraphFlowProvider = ({
   }
 
   useEffect(() => {
-    async function processPrebuiltGraph (network: SavedNetworkGraph) {
-      const graphDetails = await getGraphDetails(network)
+    async function processPrebuiltGraph(network: SavedNetworkGraph) {
+      const graphDetails = await getGraphDetails(network);
       if (graphDetails?.nodePersona.nodes.length) {
         setNodePersonaFunc({
           type: graphDetails.type,
@@ -90,19 +95,19 @@ export const NodeGraphFlowProvider = ({
       if (networkQuery === "new") {
         setNodePersonaFunc({
           type: newNetwork.type,
-          nodePersona: newNetwork.nodePersona
-        })
+          nodePersona: newNetwork.nodePersona,
+        });
       }
       const selectedNetwork = networkList.find(
         (network) => network.nodePersona.name === networkQuery
       );
 
       if (!selectedNetwork) {
-        router.push("?network=new")
+        router.push("?network=new");
       }
 
       if (selectedNetwork?.type === "prebuilt") {
-        processPrebuiltGraph(selectedNetwork)
+        processPrebuiltGraph(selectedNetwork);
       } else if (selectedNetwork?.type === "custom") {
         setNodePersonaFunc({
           type: selectedNetwork.type,
@@ -111,72 +116,73 @@ export const NodeGraphFlowProvider = ({
         if (!hasForcedGraph.current) {
           forceGraph({
             provisionedNodes: selectedNetwork.nodePersona.nodes,
-            provisionedEdges: selectedNetwork.nodePersona.edges
-          })
+            provisionedEdges: selectedNetwork.nodePersona.edges,
+          });
         }
       } else {
-        return
+        return;
       }
     } else {
-      reset()
+      reset();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkQuery, networkList]);
 
-  
+  const forceGraph = useCallback(
+    (optional?: {
+      provisionedNodes: Node<GraphNode>[];
+      provisionedEdges: Edge<GraphEdge>[];
+    }) => {
+      // don't force graph for prebuilt topologies
+      if (nodePersonaType === "prebuilt") return;
 
-  const forceGraph = useCallback((optional?: {
-    provisionedNodes: Node<GraphNode>[],
-    provisionedEdges: Edge<GraphEdge>[],
-  }) => {
-    // don't force graph for prebuilt topologies
-    if (nodePersonaType === "prebuilt") return;
+      let internalNodes = optional?.provisionedNodes ?? nodes;
+      let internalEdges = optional?.provisionedEdges ?? edges;
+      if (!internalNodes.length) return;
 
-    let internalNodes = optional?.provisionedNodes ?? nodes
-    let internalEdges = optional?.provisionedEdges ?? edges
-    if (!internalNodes.length) return;
+      const dagreGraph = new dagre.graphlib.Graph();
+      dagreGraph.setDefaultEdgeLabel(() => ({}));
 
+      dagreGraph.setGraph({ rankdir: "LR" });
 
-    const dagreGraph = new dagre.graphlib.Graph();
-    dagreGraph.setDefaultEdgeLabel(() => ({}));
+      internalNodes.forEach((node) => {
+        dagreGraph.setNode(node.id, { width: 150, height: 50 });
+      });
 
-    dagreGraph.setGraph({ rankdir: "LR" });
+      internalEdges.forEach((edge) => {
+        dagreGraph.setEdge(edge.source, edge.target);
+      });
 
-    internalNodes.forEach((node) => {
-      dagreGraph.setNode(node.id, { width: 150, height: 50 });
-    });
+      dagre.layout(dagreGraph);
 
-    internalEdges.forEach((edge) => {
-      dagreGraph.setEdge(edge.source, edge.target);
-    });
+      hasForcedGraph.current = true;
 
-    dagre.layout(dagreGraph);
+      const layoutedNodes = internalNodes.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        node.targetPosition = Position.Left;
+        node.sourcePosition = Position.Right;
+        // we need to pass a slightly different position in order to notify react flow about the change
+        // @TODO how can we change the position handling so that we dont need this hack?
+        node.position = {
+          x: nodeWithPosition.x + Math.random() / 1000,
+          y: nodeWithPosition.y,
+        };
 
-    hasForcedGraph.current = true
+        return node;
+      });
 
-    const layoutedNodes = internalNodes.map((node) => {
-      const nodeWithPosition = dagreGraph.node(node.id);
-      node.targetPosition = Position.Left;
-      node.sourcePosition = Position.Right;
-      // we need to pass a slightly different position in order to notify react flow about the change
-      // @TODO how can we change the position handling so that we dont need this hack?
-      node.position = {
-        x: nodeWithPosition.x + Math.random() / 1000,
-        y: nodeWithPosition.y,
-      };
-
-      return node;
-    });
-
-    setNodes(layoutedNodes);
-  }, [nodes, edges]);
+      setNodes(layoutedNodes);
+    },
+    [nodes, edges]
+  );
 
   function setNodePersonaFunc({ type, nodePersona }: NetworkTopology) {
+
     setNodePersonaType(type);
     setNodePersona(nodePersona);
     setNodes(nodePersona.nodes);
     setEdges(nodePersona.edges);
-  };
+  }
 
   const showGraphFunc = () => {
     // setSteps(2);
