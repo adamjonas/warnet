@@ -5,6 +5,7 @@ import NodeInfo from "./node-info-dialog";
 import ReactFlow, { addEdge, Background, BackgroundVariant, NodeDragHandler, OnMove } from "reactflow";
 import { useNodeFlowContext } from "@/contexts/node-flow-context";
 import DraggableNode from "./DraggableNode";
+import { useGroupedNodeContext } from "@/contexts/group-node-context";
 
 const ReactFlowGraph = () => {
   const {
@@ -19,6 +20,7 @@ const ReactFlowGraph = () => {
     onEdgesChange,
     forceGraph
   } = useNodeFlowContext();
+  const {selectGroupedNode} = useGroupedNodeContext()
 
   const onConnect = useCallback(
     (params: any) => {
@@ -39,6 +41,7 @@ const ReactFlowGraph = () => {
   }
   const handlePaneClick = (e: React.MouseEvent<Element, MouseEvent>) => {
     selectNode(null)
+    selectGroupedNode(null)
   }
 
   return (
@@ -47,11 +50,11 @@ const ReactFlowGraph = () => {
       {isDialogOpen && <NodeInfo />}
       <div
         id="canvas"
-        className="w-full h-full bg-brand-gray-medium border border-black"
+        className="flex-[1_1_100%] h-full bg-brand-gray-medium border border-black"
       >
         <ReactFlow
-          nodes={nodes || []}
-          edges={edges || []}
+          nodes={nodes}
+          edges={edges}
           onInit={forceGraph}
           onConnect={onConnect}
           onNodesChange={onNodesChange}

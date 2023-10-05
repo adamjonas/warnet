@@ -2,6 +2,7 @@ import { Edge, EdgeChange, Node, NodeChange, OnEdgesChange, OnNodesChange } from
 import { BITCOIN_CORE_BINARY_VERSIONS, CPU_CORES, NODE_LATENCY, RAM_OPTIONS } from "./config";
 import * as NetworkContextExports from "./contexts/network-context";
 import { Dispatch } from "react";
+import { GroupedNodeType } from "./helpers/build-grouped-node-type";
 
 export type GraphNode = {
   id: string;
@@ -88,6 +89,19 @@ export type NetworkContext = {
   // uploadToNodeGraph: () => void;
   openDialog: () => void;
   closeDialog: () => void;
+}
+
+export type GroupedNodeContext = {
+  groupedNodes: GroupedNodeType[];
+  groupedNodeInfo: GroupedNodeType | null;
+  isDialogOpen: boolean;
+  openDialog: () => void;
+  closeDialog: () => void;
+  selectGroupedNode: (x: number | null) => void;
+  editGroupedNode: () => void;
+  saveEditedGroupNode: (x: number) => void;
+  addGroupNode: () => void;
+  deleteGroupNode: (x: number) => void;
 }
 
 export type SavedNetworkGraph = {

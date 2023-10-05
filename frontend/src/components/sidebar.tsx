@@ -12,7 +12,7 @@ const Sidebar: FC<SidebarProps> = ({}) => {
     addNode()
   }
   return (
-    <aside className="flex flex-col w-2/6 h-full px-4 py-4">
+    <aside className="flex flex-col flex-[0_0_30%] h-full px-4 py-4">
       <h2 className="text-brand-text-light text-2xl font-light">
         Network Topology
       </h2>

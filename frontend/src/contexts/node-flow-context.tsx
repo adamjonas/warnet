@@ -36,7 +36,7 @@ export const NodeGraphFlowProvider = ({
   const [nodePersona, setNodePersona] = useState<NodePersona | null>(null);
   const [nodeInfo, setNodeInfo] = useState<Node<GraphNode> | null>(null);
 
-  const groupedNodes = useGroupedNodes({nodes})
+  const { groupedNodes, groupedNodeInfo, selectGroupedNode} = useGroupedNodes({nodes})
 
   const openDialog = () => setIsDialogOpen(true);
   const closeDialog = () => {
@@ -128,53 +128,55 @@ export const NodeGraphFlowProvider = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkQuery, networkList]);
 
-  const forceGraph = useCallback(
+  const forceGraph = 
     (optional?: {
       provisionedNodes: Node<GraphNode>[];
       provisionedEdges: Edge<GraphEdge>[];
     }) => {
+      console.log('nodes length: ',nodes.length)
       // don't force graph for prebuilt topologies
       if (nodePersonaType === "prebuilt") return;
+      dagreeForceGraph()
 
-      let internalNodes = optional?.provisionedNodes ?? nodes;
-      let internalEdges = optional?.provisionedEdges ?? edges;
-      if (!internalNodes.length) return;
-
-      const dagreGraph = new dagre.graphlib.Graph();
-      dagreGraph.setDefaultEdgeLabel(() => ({}));
-
-      dagreGraph.setGraph({ rankdir: "LR" });
-
-      internalNodes.forEach((node) => {
-        dagreGraph.setNode(node.id, { width: 150, height: 50 });
-      });
-
-      internalEdges.forEach((edge) => {
-        dagreGraph.setEdge(edge.source, edge.target);
-      });
-
-      dagre.layout(dagreGraph);
-
-      hasForcedGraph.current = true;
-
-      const layoutedNodes = internalNodes.map((node) => {
-        const nodeWithPosition = dagreGraph.node(node.id);
-        node.targetPosition = Position.Left;
-        node.sourcePosition = Position.Right;
-        // we need to pass a slightly different position in order to notify react flow about the change
-        // @TODO how can we change the position handling so that we dont need this hack?
-        node.position = {
-          x: nodeWithPosition.x + Math.random() / 1000,
-          y: nodeWithPosition.y,
-        };
-
-        return node;
-      });
-
-      setNodes(layoutedNodes);
-    },
-    [nodes, edges]
-  );
+      function dagreeForceGraph() {
+        let internalNodes = optional?.provisionedNodes ?? nodes;
+        let internalEdges = optional?.provisionedEdges ?? edges;
+        if (!internalNodes.length) return;
+  
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+  
+        dagreGraph.setGraph({ rankdir: "LR" });
+  
+        internalNodes.forEach((node) => {
+          dagreGraph.setNode(node.id, { width: 150, height: 50 });
+        });
+  
+        internalEdges.forEach((edge) => {
+          dagreGraph.setEdge(edge.source, edge.target);
+        });
+  
+        dagre.layout(dagreGraph);
+  
+        hasForcedGraph.current = true;
+  
+        const layoutedNodes = internalNodes.map((node) => {
+          const nodeWithPosition = dagreGraph.node(node.id);
+          node.targetPosition = Position.Left;
+          node.sourcePosition = Position.Right;
+          // we need to pass a slightly different position in order to notify react flow about the change
+          // @TODO how can we change the position handling so that we dont need this hack?
+          node.position = {
+            x: nodeWithPosition.x + Math.random() / 1000,
+            y: nodeWithPosition.y,
+          };
+  
+          return node;
+        });
+  
+        setNodes(layoutedNodes);
+      }
+    }
 
   function setNodePersonaFunc({ type, nodePersona }: NetworkTopology) {
 
